@@ -148,7 +148,7 @@ def death_screen(score):
     title_text = title_font.render("Vous êtes mort", True, (220, 20, 60))
     score_text = small_font.render(f"Score : {score}", True, (240, 240, 240))
     score_rect = score_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 120))
-    instruct_text = small_font.render("Appuie sur Entrée pour jouer", True, (200, 200, 200))
+    instruct_text = small_font.render("Appuie sur Entrée pour rejouer", True, (200, 200, 200))
 
     title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
     instruct_rect = instruct_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
@@ -161,7 +161,7 @@ def death_screen(score):
                 exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                    main_game()
+                    show_title = False
 
         display_surface.fill('#1f1b24')
         for i in range(100):
@@ -174,8 +174,7 @@ def death_screen(score):
         clock.tick(60)
 
 def reset_game():
-    global all_sprites, meteor_sprites, laser_sprites, powerup_sprites, player, start_ticks, score
-    global rapid_fire, last_rapid_fire, rapid_fire_timer
+    global all_sprites, meteor_sprites, laser_sprites, powerup_sprites, player, start_ticks, rapid_fire, last_rapid_fire, rapid_fire_timer
 
     all_sprites.empty()
     meteor_sprites.empty()
@@ -211,15 +210,14 @@ def collisions():
                 meteor_pos = collided_sprites[0].rect.center
                 PowerUp(meteor_pos, (all_sprites, powerup_sprites))
 
-def display_score():
-    score = (pygame.time.get_ticks() - start_ticks) // 100
+def display_score(score):
     text_surf = font.render(str(score), True, (240, 240, 240))
     text_rect = text_surf.get_rect(midbottom=(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 50))
 
     pygame.draw.rect(display_surface, (240, 240, 240), text_rect.inflate(20, 10).move(0,-6), 5, 10)
     display_surface.blit(text_surf, text_rect)
 
-# General setup
+# Setup pygame
 pygame.init()
 WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 720
 display_surface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -263,12 +261,14 @@ rapid_fire_timer = 0
 rapid_fire_cooldown = 100
 
 def main_game():
-    global running, start_ticks, score
+    global running, start_ticks
     global rapid_fire, last_rapid_fire, rapid_fire_timer
 
     reset_game()
     start_ticks = pygame.time.get_ticks()
     running = True
+    score = 0
+
     while running:
         dt = clock.tick(60) / 1000
 
@@ -294,7 +294,6 @@ def main_game():
             rapid_fire = True
             rapid_fire_timer = pygame.time.get_ticks()
 
-        # Disable rapid fire after time expires
         if rapid_fire and pygame.time.get_ticks() - rapid_fire_timer > RAPID_FIRE_DURATION:
             rapid_fire = False
 
@@ -310,10 +309,18 @@ def main_game():
         all_sprites.draw(display_surface)
 
         score = (pygame.time.get_ticks() - start_ticks) // 100
-        display_score()
+        display_score(score)
         pygame.display.update()
 
-title_screen()
-main_game()
-death_screen(score)
+    return score
+
+# Boucle principale du jeu
+def game_loop():
+    while True:
+        title_screen()
+        score = main_game()
+        death_screen(score)
+
+# On lance le jeu
+game_loop()
 pygame.quit()
