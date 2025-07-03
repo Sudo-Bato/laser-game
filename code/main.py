@@ -1,62 +1,64 @@
 import pygame
 from os.path import join
 from random import randint, uniform
+import random
+
+# Durée du power-up en millisecondes
+RAPID_FIRE_DURATION = 5000
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, groups):
         super().__init__(groups)
         self.image = pygame.image.load(join('images', 'player.png')).convert_alpha()
-        self.rect = self.image.get_rect(center = (WINDOW_WIDTH / 2, (WINDOW_HEIGHT / 4) * 3 ))
+        self.rect = self.image.get_rect(center=(WINDOW_WIDTH / 2, (WINDOW_HEIGHT / 4) * 3))
         self.direction = pygame.math.Vector2(0, 0)
         self.speed = 300
 
-        # cooldown
         self.can_shoot = True
         self.laser_shoot_time = 0
         self.cooldown_duration = 400
 
-        # mask
         self.mask = pygame.mask.from_surface(self.image)
-
 
     def laser_timer(self):
         if not self.can_shoot:
             current_time = pygame.time.get_ticks()
             if current_time - self.laser_shoot_time >= self.cooldown_duration:
                 self.can_shoot = True
-    
+
     def update(self, dt):
         keys = pygame.key.get_pressed()
-
-        # gestion de la vitesse boosté
         self.speed = 600 if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT] else 300
 
-        # déplacement
         self.direction.x = int(keys[pygame.K_RIGHT]) - int(keys[pygame.K_LEFT])
         self.direction.y = int(keys[pygame.K_DOWN]) - int(keys[pygame.K_UP])
         self.direction = self.direction.normalize() if self.direction.length() > 0 else self.direction
         self.rect.centerx += self.direction.x * self.speed * dt
         self.rect.centery += self.direction.y * self.speed * dt
-        
-        # laser
-        # Attention pygame n'a pas get_just_pressed, on remplace par un event dans la boucle principale
-        # Donc ici on enlève cette partie pour gérer dans l'event loop
 
-        # cooldown
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > WINDOW_WIDTH:
+            self.rect.right = WINDOW_WIDTH
+        if self.rect.top < 0:
+            self.rect.top = 0
+        if self.rect.bottom > WINDOW_HEIGHT:
+            self.rect.bottom = WINDOW_HEIGHT
+
         self.laser_timer()
 
 class Star(pygame.sprite.Sprite):
     def __init__(self, groups, surface):
         super().__init__(groups)
         self.image = surface
-        self.rect = self.image.get_rect(center = (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)))
+        self.rect = self.image.get_rect(center=(randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)))
 
 class Laser(pygame.sprite.Sprite):
     def __init__(self, surf, pos, groups):
         super().__init__(groups)
         self.image = surf
-        self.rect = self.image.get_rect(midbottom = pos)
-    
+        self.rect = self.image.get_rect(midbottom=pos)
+
     def update(self, dt):
         self.rect.centery -= 400 * dt
         if self.rect.bottom < 0:
@@ -67,27 +69,23 @@ class Meteor(pygame.sprite.Sprite):
         super().__init__(groups)
         self.original_surf = original_surf
         self.image = original_surf
-        self.rect = self.image.get_rect(center = pos)
+        self.rect = self.image.get_rect(center=pos)
         self.start_timer = pygame.time.get_ticks()
         self.life_time = 3000
-        self.direction = pygame.Vector2(uniform(-0.5, 0.5),1)
+        self.direction = pygame.math.Vector2(uniform(-0.5, 0.5), 1)
         self.speed = randint(400, 500)
         self.rotation = 0
-        self.rotation_speed = randint(50,150)
-
-        # transform test
-        self.image = pygame.transform.rotate(self.image, 90)
+        self.rotation_speed = randint(50, 150)
 
     def update(self, dt):
         self.rect.centerx += self.direction.x * self.speed * dt
         self.rect.centery += self.direction.y * self.speed * dt
+        if pygame.time.get_ticks() - self.start_timer >= self.life_time:
+            self.kill()
 
         self.rotation += self.rotation_speed * dt
         self.image = pygame.transform.rotozoom(self.original_surf, self.rotation, 1)
-        self.rect = self.image.get_rect(center = self.rect.center)
-
-        if pygame.time.get_ticks() - self.start_timer >= self.life_time:
-            self.kill()
+        self.rect = self.image.get_rect(center=self.rect.center)
 
 class AnimatedExplosion(pygame.sprite.Sprite):
     def __init__(self, frames, pos, groups):
@@ -95,13 +93,25 @@ class AnimatedExplosion(pygame.sprite.Sprite):
         self.frames = frames
         self.frame_index = 0
         self.image = self.frames[self.frame_index]
-        self.rect = self.image.get_rect(center = pos)   
+        self.rect = self.image.get_rect(center=pos)
 
     def update(self, dt):
         self.frame_index += 20 * dt
         if self.frame_index < len(self.frames):
             self.image = self.frames[int(self.frame_index) % len(self.frames)]
         else:
+            self.kill()
+
+class PowerUp(pygame.sprite.Sprite):
+    def __init__(self, pos, groups):
+        super().__init__(groups)
+        self.image = pygame.image.load(join('images', 'powerup.png')).convert_alpha()
+        self.rect = self.image.get_rect(center=pos)
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def update(self, dt):
+        self.rect.centery += 150 * dt
+        if self.rect.top > WINDOW_HEIGHT:
             self.kill()
 
 def title_screen():
@@ -121,9 +131,8 @@ def title_screen():
                 exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                    show_title = False 
+                    show_title = False
 
-        # stars in the background
         display_surface.fill('#1f1b24')
         for i in range(100):
             pygame.draw.circle(display_surface, (255, 255, 255), (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)), 1)
@@ -139,22 +148,21 @@ def death_screen(score):
     title_text = title_font.render("Vous êtes mort", True, (220, 20, 60))
     score_text = small_font.render(f"Score : {score}", True, (240, 240, 240))
     score_rect = score_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 120))
-    instruct_text = small_font.render("Appuie sur Entrée pour rejouer", True, (200, 200, 200))
+    instruct_text = small_font.render("Appuie sur Entrée pour jouer", True, (200, 200, 200))
 
     title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
     instruct_rect = instruct_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
 
-    show_death = True
-    while show_death:
+    show_title = True
+    while show_title:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                    show_death = False 
+                    main_game()
 
-        # stars in the background
         display_surface.fill('#1f1b24')
         for i in range(100):
             pygame.draw.circle(display_surface, (255, 255, 255), (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)), 1)
@@ -166,14 +174,23 @@ def death_screen(score):
         clock.tick(60)
 
 def reset_game():
-    global all_sprites, meteor_sprites, laser_sprites, player
+    global all_sprites, meteor_sprites, laser_sprites, powerup_sprites, player, start_ticks, score
+    global rapid_fire, last_rapid_fire, rapid_fire_timer
+
     all_sprites.empty()
     meteor_sprites.empty()
     laser_sprites.empty()
-    
+    powerup_sprites.empty()
+
     for i in range(20):
         Star(all_sprites, star_surf)
     player = Player(all_sprites)
+
+    rapid_fire = False
+    last_rapid_fire = 0
+    rapid_fire_timer = 0
+
+    start_ticks = pygame.time.get_ticks()
 
 def collisions():
     global running
@@ -182,33 +199,35 @@ def collisions():
     if collision_sprites:
         damage_soud.play()
         running = False
-         
+
     for laser in laser_sprites:
         collided_sprites = pygame.sprite.spritecollide(laser, meteor_sprites, True, pygame.sprite.collide_mask)
         if collided_sprites:
             laser.kill()
             AnimatedExplosion(explosion_frames, laser.rect.midtop, all_sprites)
             explosion_soud.play()
-    
+
+            if random.randint(1, 30) == 1:
+                meteor_pos = collided_sprites[0].rect.center
+                PowerUp(meteor_pos, (all_sprites, powerup_sprites))
+
 def display_score():
     score = (pygame.time.get_ticks() - start_ticks) // 100
     text_surf = font.render(str(score), True, (240, 240, 240))
     text_rect = text_surf.get_rect(midbottom=(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 50))
 
-    pygame.draw.rect(display_surface, (240, 240, 240) , text_rect.inflate(20, 10).move(0,-6), 5, 10)  
+    pygame.draw.rect(display_surface, (240, 240, 240), text_rect.inflate(20, 10).move(0,-6), 5, 10)
     display_surface.blit(text_surf, text_rect)
 
-# general setup
+# General setup
 pygame.init()
 WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 720
 display_surface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-WINDOW_TITLE = "Le Justicier de la Galaxie"
-pygame.display.set_caption(WINDOW_TITLE)
+pygame.display.set_caption("Le Justicier de la Galaxie")
 pygame.display.set_icon(pygame.image.load(join('images', 'player.png')).convert_alpha())
 clock = pygame.time.Clock()
 running = True
 
-# imports
 meteor_surface = pygame.image.load(join('images', 'meteor.png')).convert_alpha()
 laser_surface = pygame.image.load(join('images', 'laser.png')).convert_alpha()
 star_surf = pygame.image.load(join('images', 'star.png')).convert_alpha()
@@ -226,58 +245,75 @@ damage_soud.set_volume(0.2)
 game_music.play(loops=-1)
 game_music.set_volume(0.7)
 
-# sprites
 all_sprites = pygame.sprite.Group()
 meteor_sprites = pygame.sprite.Group()
 laser_sprites = pygame.sprite.Group()
+powerup_sprites = pygame.sprite.Group()
 
-# custom events -> meteor event
+for i in range(20):
+    Star(all_sprites, star_surf)
+player = Player(all_sprites)
+
 meteor_event = pygame.event.custom_type()
 pygame.time.set_timer(meteor_event, 500)
 
-# Game main loop and management
+rapid_fire = False
+last_rapid_fire = 0
+rapid_fire_timer = 0
+rapid_fire_cooldown = 100
+
 def main_game():
-    global running, start_ticks
+    global running, start_ticks, score
+    global rapid_fire, last_rapid_fire, rapid_fire_timer
+
     reset_game()
     start_ticks = pygame.time.get_ticks()
     running = True
-
-    # To handle laser shooting on keydown
     while running:
         dt = clock.tick(60) / 1000
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
-
+                running = False
             if event.type == meteor_event:
                 x, y = randint(0, WINDOW_WIDTH), randint(-200, -100)
                 Meteor(meteor_surface, (x, y), (all_sprites, meteor_sprites))
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE and player.can_shoot:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and not rapid_fire:
+                if player.can_shoot:
                     Laser(laser_surface, player.rect.midtop, (all_sprites, laser_sprites))
                     player.can_shoot = False
                     player.laser_shoot_time = pygame.time.get_ticks()
                     laser_soud.play()
 
-        # Update
         all_sprites.update(dt)
         collisions()
 
-        # Draw
+        # Check for power-up collection
+        collected = pygame.sprite.spritecollide(player, powerup_sprites, True, pygame.sprite.collide_mask)
+        if collected:
+            rapid_fire = True
+            rapid_fire_timer = pygame.time.get_ticks()
+
+        # Disable rapid fire after time expires
+        if rapid_fire and pygame.time.get_ticks() - rapid_fire_timer > RAPID_FIRE_DURATION:
+            rapid_fire = False
+
+        keys = pygame.key.get_pressed()
+        if rapid_fire and keys[pygame.K_SPACE]:
+            current_time = pygame.time.get_ticks()
+            if current_time - last_rapid_fire > rapid_fire_cooldown:
+                Laser(laser_surface, player.rect.midtop, (all_sprites, laser_sprites))
+                laser_soud.play()
+                last_rapid_fire = current_time
+
         display_surface.fill('#3a2e3f')
         all_sprites.draw(display_surface)
 
+        score = (pygame.time.get_ticks() - start_ticks) // 100
         display_score()
         pygame.display.update()
 
-    return (pygame.time.get_ticks() - start_ticks) // 100
-
-# Program start
 title_screen()
-while True:
-    score = main_game()
-    death_screen(score)
+main_game()
+death_screen(score)
 pygame.quit()
