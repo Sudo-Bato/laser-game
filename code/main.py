@@ -186,7 +186,7 @@ laser_soud.set_volume(0.2)
 explosion_soud.set_volume(0.2)
 damage_soud.set_volume(0.2)
 game_music.play(loops=-1)
-game_music.set_volume(0.3)
+game_music.set_volume(0.7)
 
 # sprites
 all_sprites = pygame.sprite.Group()
