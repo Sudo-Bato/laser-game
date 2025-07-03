@@ -105,6 +105,36 @@ class AnimatedExplosion(pygame.sprite.Sprite):
         else:
             self.kill()
 
+def title_screen():
+    title_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 80)
+    small_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 30)
+    title_text = title_font.render("Le Justicier de la Galaxie", True, (255, 255, 255))
+    instruct_text = small_font.render("Appuie sur Entrée pour jouer", True, (200, 200, 200))
+
+    title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
+    instruct_rect = instruct_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
+
+    show_title = True
+    while show_title:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    show_title = False
+
+        # stars in the background
+        display_surface.fill('#1f1b24')
+        for i in range(100):
+            pygame.draw.circle(display_surface, (255, 255, 255), (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)), 1)
+
+        display_surface.blit(title_text, title_rect)
+        display_surface.blit(instruct_text, instruct_rect)
+        pygame.display.update()
+        clock.tick(60)
+
+
 
 
 def collisions():
@@ -123,8 +153,8 @@ def collisions():
             explosion_soud.play()
     
 def display_score():
-    current_time = pygame.time.get_ticks() // 100
-    text_surf = font.render(str(current_time), True, (240, 240, 240))
+    score = (pygame.time.get_ticks() - start_ticks) // 100
+    text_surf = font.render(str(score), True, (240, 240, 240))
     text_rect = text_surf.get_frect(midbottom=(WINDOW_WIDTH / 2, WINDOW_HEIGHT - 50))
 
     pygame.draw.rect(display_surface, (240, 240, 240) , text_rect.inflate(20, 10).move(0,-6), 5, 10)  
@@ -138,8 +168,8 @@ display_surface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 WINDOW_TITLE = "Le Justicier de la Galaxie"
 pygame.display.set_caption(WINDOW_TITLE)
 pygame.display.set_icon(pygame.image.load(join('images', 'player.png')).convert_alpha())
-running = True
 clock = pygame.time.Clock()
+running = True
 
 # imports
 meteor_surface = pygame.image.load(join('images', 'meteor.png')).convert_alpha()
@@ -171,29 +201,34 @@ meteor_event = pygame.event.custom_type()
 pygame.time.set_timer(meteor_event, 500)
 
 # game loop
-while running:
-    dt = clock.tick() / 1000
-    # event loop
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == meteor_event:
-            x,y = randint(0, WINDOW_WIDTH), randint(-200, -100)
-            Meteor(meteor_surface, (x, y), (all_sprites, meteor_sprites))
+def main_game():
+    global running, start_ticks
+    start_ticks = pygame.time.get_ticks()
+    running = True
+    while running:
+        dt = clock.tick() / 1000
+        # event loop
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == meteor_event:
+                x,y = randint(0, WINDOW_WIDTH), randint(-200, -100)
+                Meteor(meteor_surface, (x, y), (all_sprites, meteor_sprites))
 
-    # updates
-    all_sprites.update(dt)
-    collisions()
+        # updates
+        all_sprites.update(dt)
+        collisions()
 
-    # draw the game
-    display_surface.fill('#3a2e3f')
-    all_sprites.draw(display_surface)
+        # draw the game
+        display_surface.fill('#3a2e3f')
+        all_sprites.draw(display_surface)
 
-    # draw test
-    
+        # draw test
+        
 
-    display_score()
-    pygame.display.update()
+        display_score()
+        pygame.display.update()
 
-
+title_screen()
+main_game()
 pygame.quit()
