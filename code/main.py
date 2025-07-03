@@ -2,9 +2,11 @@ import pygame
 from os.path import join
 from random import randint, uniform
 import random
+import json
 
 # Durée du power-up en millisecondes
 RAPID_FIRE_DURATION = 5000
+SCORE_FILE = 'scores.json'
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, groups):
@@ -142,13 +144,60 @@ def title_screen():
         pygame.display.update()
         clock.tick(60)
 
+def main_menu_screen():
+    small_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 50)
+    menu_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 30)
+
+    options = ["1. Nouvelle Partie", "2. Boutique (à venir)", "3. Meilleurs Scores",  "4. Quitter"]
+    option_surfaces = [menu_font.render(opt, True, (240, 240, 240)) for opt in options]
+    option_rects = [surf.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + i * 60)) for i, surf in enumerate(option_surfaces)]
+
+    title_text = small_font.render("Menu Principal", True, (200, 200, 200))
+    title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 100))
+
+    selected = False
+    choice = None
+
+    while not selected:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    choice = "play"
+                    selected = True
+                elif event.key == pygame.K_2:
+                    choice = "shop"
+                    selected = True
+                elif event.key == pygame.K_3:
+                    choice = "high_scores"
+                    selected = True
+                elif event.key == pygame.K_4 or event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    exit()
+
+        display_surface.fill('#1f1b24')
+        for i in range(100):
+            pygame.draw.circle(display_surface, (255, 255, 255), (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)), 1)
+
+        display_surface.blit(title_text, title_rect)
+        for surf, rect in zip(option_surfaces, option_rects):
+            display_surface.blit(surf, rect)
+
+        pygame.display.update()
+        clock.tick(60)
+
+    return choice    
+
 def death_screen(score):
     title_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 80)
     small_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 30)
     title_text = title_font.render("Vous êtes mort", True, (220, 20, 60))
     score_text = small_font.render(f"Score : {score}", True, (240, 240, 240))
     score_rect = score_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 120))
-    instruct_text = small_font.render("Appuie sur Entrée pour rejouer", True, (200, 200, 200))
+    instruct_text = small_font.render("Appuie sur Entrée pour continuer", True, (200, 200, 200))
 
     title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
     instruct_rect = instruct_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
@@ -216,6 +265,53 @@ def display_score(score):
 
     pygame.draw.rect(display_surface, (240, 240, 240), text_rect.inflate(20, 10).move(0,-6), 5, 10)
     display_surface.blit(text_surf, text_rect)
+
+def load_scores():
+    try:
+        with open(SCORE_FILE, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def save_score(score):
+    scores = load_scores()
+    scores.append(score)
+    scores = sorted(scores, reverse=True)[:10]
+    with open(SCORE_FILE, 'w') as f:
+        json.dump(scores, f, indent=4)
+
+def show_high_scores():
+    high_scores = load_scores()
+    font_title = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 60)
+    font_entry = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 40)
+
+    title_text = font_title.render("Meilleurs Scores", True, (240, 240, 240))
+    title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, 100))
+
+    showing = True
+    while showing:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+                    showing = False
+
+        display_surface.fill('#1f1b24')
+        display_surface.blit(title_text, title_rect)
+
+        for i in range(100):
+            pygame.draw.circle(display_surface, (255, 255, 255), (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)), 1)
+
+        for i, score in enumerate(high_scores):
+            text = f"{i+1}. {score} pts"
+            entry_surf = font_entry.render(text, True, (200, 200, 200))
+            entry_rect = entry_surf.get_rect(center=(WINDOW_WIDTH // 2, 180 + i * 50))
+            display_surface.blit(entry_surf, entry_rect)
+
+        pygame.display.update()
+        clock.tick(60)
 
 # Setup pygame
 pygame.init()
@@ -316,10 +412,20 @@ def main_game():
 
 # Boucle principale du jeu
 def game_loop():
+    title_screen()
     while True:
-        title_screen()
-        score = main_game()
-        death_screen(score)
+        choice = main_menu_screen()
+
+        if choice == "play":
+            score = main_game()
+            save_score(score)
+            death_screen(score)
+        elif choice == "high_scores":
+            show_high_scores()
+        elif choice == "shop":
+            print("Boutique")
+            pygame.time.wait(1000)
+
 
 # On lance le jeu
 game_loop()

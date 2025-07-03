@@ -1,0 +1,16 @@
+{
+    "coins": 0,
+
+    "upgrades": {
+        "slower_cooldown": false,
+        "faster_mouvment_speed": false
+    },
+
+    "skins": {
+        "default": true,
+        "yellow_ship": false
+    },
+    
+    "selected_skin": "default"
+
+}
