@@ -16,10 +16,10 @@ Based on the **first part** of this YouTube tutorial:
 ## 🎮 Added Features (From me)
 
 - Start screen
+- Power-ups
 
 ## 🔜 Planned Features
 
 - Start screen and main menu  
 - In-game currency system
-- Power-ups and upgrades
 - Shop system to spend earned currency
