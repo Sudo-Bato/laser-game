@@ -120,9 +120,11 @@ def title_screen():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
+                title_screen_music.stop()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
                     show_title = False
+                    title_screen_music.fadeout(1000)    
 
         # stars in the background
         display_surface.fill('#1f1b24')
@@ -133,9 +135,6 @@ def title_screen():
         display_surface.blit(instruct_text, instruct_rect)
         pygame.display.update()
         clock.tick(60)
-
-
-
 
 def collisions():
     global running
@@ -182,11 +181,12 @@ laser_soud = pygame.mixer.Sound(join('audio', 'laser.wav'))
 explosion_soud = pygame.mixer.Sound(join('audio', 'explosion.wav'))
 damage_soud = pygame.mixer.Sound(join('audio', 'damage.ogg'))
 game_music = pygame.mixer.Sound(join('audio', 'game_music.wav'))
+title_screen_music = pygame.mixer.Sound(join('audio', '8bit-spaceshooter.mp3'))
 laser_soud.set_volume(0.2)
 explosion_soud.set_volume(0.2)
 damage_soud.set_volume(0.2)
-game_music.set_volume(0.1)
-game_music.play(loops= -1)
+game_music.play(loops=-1)
+game_music.set_volume(0.3)
 
 # sprites
 all_sprites = pygame.sprite.Group()
