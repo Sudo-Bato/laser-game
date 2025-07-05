@@ -7,20 +7,77 @@ import json
 # Durée du power-up en millisecondes
 RAPID_FIRE_DURATION = 5000
 SCORE_FILE = 'scores.json'
+PLAYER_DATA_FILE = 'save_data.json'
+
+# --- Player Data Management ---
+def load_player_data():
+    try:
+        with open(PLAYER_DATA_FILE, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        # Default data if file doesn't exist or is corrupted
+        return {
+            "coins": 0,
+            "upgrades": {
+                "slower_cooldown": False,
+                "faster_movement_speed": False
+            },
+            "skins": {
+                "default": True,
+                "yellow_ship": False
+            },
+            "selected_skin": "default"
+        }
+
+def save_player_data(data):
+    with open(PLAYER_DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+# --- Game Classes ---
 
 class Player(pygame.sprite.Sprite):
-    def __init__(self, groups):
+    def __init__(self, groups, player_data):
         super().__init__(groups)
-        self.image = pygame.image.load(join('images', 'player.png')).convert_alpha()
+        self.player_data = player_data
+        self.load_skin()
+
         self.rect = self.image.get_rect(center=(WINDOW_WIDTH / 2, (WINDOW_HEIGHT / 4) * 3))
         self.direction = pygame.math.Vector2(0, 0)
-        self.speed = 300
+
+        # Define base attributes BEFORE calling apply_upgrades
+        self.base_speed = 300
+        self.speed = self.base_speed
 
         self.can_shoot = True
         self.laser_shoot_time = 0
-        self.cooldown_duration = 400
+        self.base_cooldown_duration = 400
+        self.cooldown_duration = self.base_cooldown_duration
+
+        self.apply_upgrades() # Now this call is safe
 
         self.mask = pygame.mask.from_surface(self.image)
+
+    def load_skin(self):
+        skin_name = self.player_data["selected_skin"]
+        if skin_name == "default":
+            self.image = pygame.image.load(join('images', 'player.png')).convert_alpha()
+        elif skin_name == "yellow_ship":
+            # Ensure you have 'yellow_ship.png' in your 'images' folder
+            self.image = pygame.image.load(join('images', 'yellow_ship.png')).convert_alpha()
+        # Add more skins here as you create them
+
+    def apply_upgrades(self):
+        # Apply movement speed upgrade
+        if self.player_data["upgrades"]["faster_movement_speed"]:
+            self.speed = self.base_speed * 1.5 # 50% faster
+        else:
+            self.speed = self.base_speed
+
+        # Apply cooldown upgrade
+        if self.player_data["upgrades"]["slower_cooldown"]:
+            self.cooldown_duration = self.base_cooldown_duration * 0.5 # 50% faster shooting
+        else:
+            self.cooldown_duration = self.base_cooldown_duration
 
     def laser_timer(self):
         if not self.can_shoot:
@@ -30,13 +87,14 @@ class Player(pygame.sprite.Sprite):
 
     def update(self, dt):
         keys = pygame.key.get_pressed()
-        self.speed = 600 if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT] else 300
+        # Apply shift for temporary speed boost on top of upgrades
+        current_speed = self.speed * 2 if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT] else self.speed
 
         self.direction.x = int(keys[pygame.K_RIGHT]) - int(keys[pygame.K_LEFT])
         self.direction.y = int(keys[pygame.K_DOWN]) - int(keys[pygame.K_UP])
         self.direction = self.direction.normalize() if self.direction.length() > 0 else self.direction
-        self.rect.centerx += self.direction.x * self.speed * dt
-        self.rect.centery += self.direction.y * self.speed * dt
+        self.rect.centerx += self.direction.x * current_speed * dt
+        self.rect.centery += self.direction.y * current_speed * dt
 
         if self.rect.left < 0:
             self.rect.left = 0
@@ -67,7 +125,7 @@ class Laser(pygame.sprite.Sprite):
             self.kill()
 
 class Meteor(pygame.sprite.Sprite):
-    def __init__(self, original_surf, pos, groups):
+    def __init__(self, original_surf, pos, groups, is_powerup_carrier=False): # Ajout de is_powerup_carrier
         super().__init__(groups)
         self.original_surf = original_surf
         self.image = original_surf
@@ -78,10 +136,13 @@ class Meteor(pygame.sprite.Sprite):
         self.speed = randint(400, 500)
         self.rotation = 0
         self.rotation_speed = randint(50, 150)
+        self.is_powerup_carrier = is_powerup_carrier # Stocke l'information
 
     def update(self, dt):
         self.rect.centerx += self.direction.x * self.speed * dt
         self.rect.centery += self.direction.y * self.speed * dt
+        if self.rect.top > WINDOW_HEIGHT or self.rect.left > WINDOW_WIDTH or self.rect.right < 0:
+            self.kill()
         if pygame.time.get_ticks() - self.start_timer >= self.life_time:
             self.kill()
 
@@ -116,6 +177,8 @@ class PowerUp(pygame.sprite.Sprite):
         if self.rect.top > WINDOW_HEIGHT:
             self.kill()
 
+# --- Game Screens ---
+
 def title_screen():
     title_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 80)
     small_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 30)
@@ -126,6 +189,8 @@ def title_screen():
     instruct_rect = instruct_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
 
     show_title = True
+
+
     while show_title:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -148,7 +213,7 @@ def main_menu_screen():
     small_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 50)
     menu_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 30)
 
-    options = ["1. Nouvelle Partie", "2. Boutique (à venir)", "3. Meilleurs Scores",  "4. Quitter"]
+    options = ["1. Nouvelle Partie", "2. Boutique", "3. Meilleurs Scores", "4. Quitter"]
     option_surfaces = [menu_font.render(opt, True, (240, 240, 240)) for opt in options]
     option_rects = [surf.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + i * 60)) for i, surf in enumerate(option_surfaces)]
 
@@ -189,7 +254,7 @@ def main_menu_screen():
         pygame.display.update()
         clock.tick(60)
 
-    return choice    
+    return choice
 
 def death_screen(score):
     title_font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 80)
@@ -202,15 +267,15 @@ def death_screen(score):
     title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 50))
     instruct_rect = instruct_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 50))
 
-    show_title = True
-    while show_title:
+    show_death = True
+    while show_death:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                    show_title = False
+                    show_death = False
 
         display_surface.fill('#1f1b24')
         for i in range(100):
@@ -222,8 +287,141 @@ def death_screen(score):
         pygame.display.update()
         clock.tick(60)
 
+def shop_screen():
+    global player_data
+    shop_font_title = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 60)
+    shop_font_item = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 30)
+    shop_font_info = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 25)
+
+    title_text = shop_font_title.render("Boutique", True, (240, 240, 240))
+    title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, 70))
+
+    items = {
+        "upgrades": [
+            {"name": "Refroidissement Amélioré", "desc": "Tir plus rapide (Cooldown -50%)", "cost": 100, "key": "slower_cooldown", "type": "upgrade"},
+            {"name": "Propulseurs Améliorés", "desc": "Vitesse de déplacement +50%", "cost": 150, "key": "faster_movement_speed", "type": "upgrade"},
+        ],
+        "skins": [
+            {"name": "Vaisseau Standard", "desc": "Le look classique.", "cost": 0, "key": "default", "type": "skin"},
+            {"name": "Vaisseau Jaune", "desc": "Change l'apparence de votre vaisseau", "cost": 200, "key": "yellow_ship", "type": "skin"},
+        ]
+    }
+
+    # Le skin de base est toujours possédé
+    player_data["skins"].setdefault("default", True)
+
+    showing_shop = True
+    while showing_shop:
+        all_available_items = []
+
+        display_surface.fill('#1f1b24')
+        for _ in range(100):
+            pygame.draw.circle(display_surface, (255, 255, 255), (randint(0, WINDOW_WIDTH), randint(0, WINDOW_HEIGHT)), 1)
+
+        display_surface.blit(title_text, title_text.get_rect(center=(WINDOW_WIDTH // 2, 70)))
+
+        coins_text = shop_font_info.render(f"Vos Pièces: {player_data['coins']}", True, (255, 215, 0))
+        display_surface.blit(coins_text, coins_text.get_rect(midtop=(WINDOW_WIDTH // 2, title_rect.bottom + 20)))
+
+        current_y = coins_text.get_rect().bottom + 40
+        item_counter = 1
+
+        # --- Upgrades ---
+        upgrade_title = shop_font_item.render("--- Améliorations ---", True, (150, 150, 255))
+        display_surface.blit(upgrade_title, upgrade_title.get_rect(midleft=(50, current_y)))
+        current_y += 50
+
+        for item in items["upgrades"]:
+            owned = player_data["upgrades"].get(item["key"], False)
+            color = (100, 255, 100) if owned else (200, 200, 200)
+            status_text = "(Acheté)" if owned else f"- {item['cost']} pièces"
+
+            all_available_items.append(item)
+
+            item_text = shop_font_item.render(f"{item_counter}. {item['name']} {status_text}", True, color)
+            display_surface.blit(item_text, item_text.get_rect(midleft=(50, current_y)))
+
+            desc_text = shop_font_info.render(f"    {item['desc']}", True, (180, 180, 180))
+            display_surface.blit(desc_text, desc_text.get_rect(midleft=(50, current_y + 35)))
+
+            item_counter += 1
+            current_y += 75
+
+        # --- Skins ---
+        skin_title = shop_font_item.render("--- Apparences ---", True, (255, 150, 150))
+        display_surface.blit(skin_title, skin_title.get_rect(midleft=(50, current_y)))
+        current_y += 50
+
+        for item in items["skins"]:
+            owned = player_data["skins"].get(item["key"], False)
+            selected = player_data["selected_skin"] == item["key"]
+            color = (100, 255, 255) if selected else (100, 255, 100) if owned else (200, 200, 200)
+            status_text = "(Sélectionné)" if selected else "(Acheté - Appuyer pour équiper)" if owned else f"- {item['cost']} pièces"
+
+            all_available_items.append(item)
+
+            item_text = shop_font_item.render(f"{item_counter}. {item['name']} {status_text}", True, color)
+            display_surface.blit(item_text, item_text.get_rect(midleft=(50, current_y)))
+
+            desc_text = shop_font_info.render(f"    {item['desc']}", True, (180, 180, 180))
+            display_surface.blit(desc_text, desc_text.get_rect(midleft=(50, current_y + 35)))
+
+            item_counter += 1
+            current_y += 75
+
+        # Instructions
+        instruction_text = shop_font_info.render("Appuyez sur un numéro pour acheter/équiper. Échap pour retourner au menu.", True, (200, 200, 200))
+        display_surface.blit(instruction_text, instruction_text.get_rect(midbottom=(WINDOW_WIDTH // 2, WINDOW_HEIGHT - 30)))
+
+        # Events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    showing_shop = False
+                elif pygame.K_1 <= event.key <= pygame.K_9:
+                    selected_item_number = event.key - pygame.K_0
+                    if 1 <= selected_item_number <= len(all_available_items):
+                        chosen_item = all_available_items[selected_item_number - 1]
+
+                        if chosen_item["type"] == "upgrade":
+                            already_owned = player_data["upgrades"].get(chosen_item["key"], False)
+                            if already_owned:
+                                print("Déjà acheté.")
+                            elif player_data["coins"] >= chosen_item["cost"]:
+                                player_data["coins"] -= chosen_item["cost"]
+                                player_data["upgrades"][chosen_item["key"]] = True
+                                save_player_data(player_data)
+                                print(f"Acheté : {chosen_item['name']}")
+                            else:
+                                print("Pas assez de pièces.")
+
+                        elif chosen_item["type"] == "skin":
+                            owned = player_data["skins"].get(chosen_item["key"], False)
+                            if not owned and player_data["coins"] >= chosen_item["cost"]:
+                                player_data["coins"] -= chosen_item["cost"]
+                                player_data["skins"][chosen_item["key"]] = True
+                                player_data["selected_skin"] = chosen_item["key"]
+                                save_player_data(player_data)
+                                print(f"Acheté et équipé : {chosen_item['name']}")
+                            elif owned:
+                                player_data["selected_skin"] = chosen_item["key"]
+                                save_player_data(player_data)
+                                print(f"Apparence équipée : {chosen_item['name']}")
+                            else:
+                                print("Pas assez de pièces.")
+                    else:
+                        print("Numéro invalide.")
+
+        pygame.display.update()
+        clock.tick(60)
+
+
 def reset_game():
-    global all_sprites, meteor_sprites, laser_sprites, powerup_sprites, player, start_ticks, rapid_fire, last_rapid_fire, rapid_fire_timer
+    global all_sprites, meteor_sprites, laser_sprites, powerup_sprites, player, start_ticks, rapid_fire, last_rapid_fire, rapid_fire_timer, player_data
 
     all_sprites.empty()
     meteor_sprites.empty()
@@ -232,7 +430,7 @@ def reset_game():
 
     for i in range(20):
         Star(all_sprites, star_surf)
-    player = Player(all_sprites)
+    player = Player(all_sprites, player_data) # Pass player_data to Player constructor
 
     rapid_fire = False
     last_rapid_fire = 0
@@ -241,23 +439,31 @@ def reset_game():
     start_ticks = pygame.time.get_ticks()
 
 def collisions():
-    global running
+    global running, player_data
 
     collision_sprites = pygame.sprite.spritecollide(player, meteor_sprites, True, pygame.sprite.collide_mask)
     if collision_sprites:
         damage_soud.play()
-        running = False
+        running = False # End game on player collision
 
     for laser in laser_sprites:
         collided_sprites = pygame.sprite.spritecollide(laser, meteor_sprites, True, pygame.sprite.collide_mask)
         if collided_sprites:
             laser.kill()
-            AnimatedExplosion(explosion_frames, laser.rect.midtop, all_sprites)
-            explosion_soud.play()
+            # Explode each collided meteor
+            for meteor in collided_sprites:
+                AnimatedExplosion(explosion_frames, meteor.rect.center, all_sprites)
+                explosion_soud.play()
 
-            if random.randint(1, 30) == 1:
-                meteor_pos = collided_sprites[0].rect.center
-                PowerUp(meteor_pos, (all_sprites, powerup_sprites))
+                # Check if the destroyed meteor was a power-up carrier
+                if meteor.is_powerup_carrier:
+                    player_data["coins"] += 20  # 20 coins for yellow meteor
+                    PowerUp(meteor.rect.center, (all_sprites, powerup_sprites)) # Drop the power-up
+                else:
+                    player_data["coins"] += 1 # 1 coins for regular meteors
+
+            save_player_data(player_data) # Save coins immediately after destruction
+
 
 def display_score(score):
     text_surf = font.render(str(score), True, (240, 240, 240))
@@ -322,31 +528,38 @@ pygame.display.set_icon(pygame.image.load(join('images', 'player.png')).convert_
 clock = pygame.time.Clock()
 running = True
 
+# Load assets
 meteor_surface = pygame.image.load(join('images', 'meteor.png')).convert_alpha()
+# Assurez-vous d'avoir 'yellow_meteor.png' dans votre dossier 'images'
+yellow_meteor_surface = pygame.image.load(join('images', 'yellow_meteor.png')).convert_alpha() 
 laser_surface = pygame.image.load(join('images', 'laser.png')).convert_alpha()
 star_surf = pygame.image.load(join('images', 'star.png')).convert_alpha()
+
 font = pygame.font.Font(join('images', 'Oxanium-Bold.ttf'), 40)
 explosion_frames = [pygame.image.load(join('images', 'explosion', f'{i}.png')).convert_alpha() for i in range(21)]
 
+# Load sounds
 laser_soud = pygame.mixer.Sound(join('audio', 'laser.wav'))
 explosion_soud = pygame.mixer.Sound(join('audio', 'explosion.wav'))
 damage_soud = pygame.mixer.Sound(join('audio', 'damage.ogg'))
 game_music = pygame.mixer.Sound(join('audio', 'game_music.wav'))
-title_screen_music = pygame.mixer.Sound(join('audio', '8bit-spaceshooter.mp3'))
 laser_soud.set_volume(0.2)
 explosion_soud.set_volume(0.2)
 damage_soud.set_volume(0.2)
-game_music.play(loops=-1)
-game_music.set_volume(0.7)
 
+# Global player data
+player_data = load_player_data()
+
+# Sprite groups
 all_sprites = pygame.sprite.Group()
 meteor_sprites = pygame.sprite.Group()
 laser_sprites = pygame.sprite.Group()
 powerup_sprites = pygame.sprite.Group()
 
+# Initial setup for player and stars (will be reset by reset_game)
 for i in range(20):
     Star(all_sprites, star_surf)
-player = Player(all_sprites)
+player = Player(all_sprites, player_data) # Initial player creation with loaded data
 
 meteor_event = pygame.event.custom_type()
 pygame.time.set_timer(meteor_event, 500)
@@ -357,13 +570,14 @@ rapid_fire_timer = 0
 rapid_fire_cooldown = 100
 
 def main_game():
-    global running, start_ticks
+    global running, start_ticks, player_data
     global rapid_fire, last_rapid_fire, rapid_fire_timer
 
-    reset_game()
+    reset_game() # Ensures new player and game state based on current player_data
     start_ticks = pygame.time.get_ticks()
     running = True
     score = 0
+    game_music.set_volume(0.7)
 
     while running:
         dt = clock.tick(60) / 1000
@@ -373,7 +587,11 @@ def main_game():
                 running = False
             if event.type == meteor_event:
                 x, y = randint(0, WINDOW_WIDTH), randint(-200, -100)
-                Meteor(meteor_surface, (x, y), (all_sprites, meteor_sprites))
+                # Nouvelle logique : 1 chance sur 30 d'avoir un météore jaune
+                if random.randint(1, 30) == 1:
+                    Meteor(yellow_meteor_surface, (x, y), (all_sprites, meteor_sprites), is_powerup_carrier=True)
+                else:
+                    Meteor(meteor_surface, (x, y), (all_sprites, meteor_sprites))
             if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and not rapid_fire:
                 if player.can_shoot:
                     Laser(laser_surface, player.rect.midtop, (all_sprites, laser_sprites))
@@ -404,14 +622,16 @@ def main_game():
         display_surface.fill('#3a2e3f')
         all_sprites.draw(display_surface)
 
-        score = (pygame.time.get_ticks() - start_ticks) // 100
+        score = (pygame.time.get_ticks() - start_ticks) // 100 
         display_score(score)
         pygame.display.update()
 
     return score
 
-# Boucle principale du jeu
+# Main game loop
+game_music.play(loops=-1)
 def game_loop():
+    global player_data
     title_screen()
     while True:
         choice = main_menu_screen()
@@ -423,10 +643,12 @@ def game_loop():
         elif choice == "high_scores":
             show_high_scores()
         elif choice == "shop":
-            print("Boutique")
-            pygame.time.wait(1000)
+            shop_screen()
+            # After shop, reload player_data and recreate player to apply changes
+            player_data = load_player_data() # Ensure player_data is updated
+            reset_game() # This will recreate the player with updated data
 
 
-# On lance le jeu
+# Launch the game
 game_loop()
 pygame.quit()
