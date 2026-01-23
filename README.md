@@ -17,9 +17,6 @@ Based on the **first part** of this YouTube tutorial:
 
 - Start screen
 - Power-ups
-
-## 🔜 Planned Features
-
 - Start screen and main menu  
 - In-game currency system
 - Shop system to spend earned currency
